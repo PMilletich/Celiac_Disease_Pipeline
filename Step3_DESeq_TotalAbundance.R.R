@@ -2,19 +2,21 @@ library(DESeq2)
 library(dplyr) #mutate_all
 '%notin%' = Negate('%in%')
 
-###### 
+################################################################# 
 #File import 
-setwd("~/Desktop/Reviewer_Edits_V2/")
+#################################################################
+#File with 16s Sequence and taxonomical classification 
 taxa_identifiers = read.csv("Taxa_ASV_Identifiers.csv")
+#From Step 1 
 Total_reads = readRDS("Filters_PS.RDS")
 Sample_data = read.csv("Celiac_Samples.csv")
 
-alpha = 0.05
-Control_Num = 2
-seed_number = 1
-seed_max = 5
-
-current_glom_1 = "Genus"
+#################################################################
+#Default Values 
+#################################################################
+alpha = 0.05 #Significance threshold 
+Control_Num = 2 #Numnber of Cases per control 
+seed_max = 100 #Max number of iterations 
 
 current_method = "Reads"
 Actual_sign = data.frame()
