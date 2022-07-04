@@ -18,7 +18,7 @@ Sample_data = read.csv("Celiac_Samples.csv")
 #Default Values 
 #################################################################
 alpha = 0.05 #Significance threshold 
-Control_Num = 2 #Numnber of Cases per control 
+Control_Num = 2 #Numnber of Controls per Case 
 seed_max = 100 #Max number of iterations 
 
 #Create dataframe to append to 
@@ -129,7 +129,7 @@ for (seed_number in 1:seed_max) {
   Control = subset(count_table_2, count_table_2$Autoimmune_2_groups == "Control")
   count_table_2$Autoimmune_2_groups = factor(count_table_2$Autoimmune_2_groups, 
                                              levels = unique(count_table_2$Autoimmune_2_groups))
-  #Replace any NA's and make sure values are integers 
+  #Replace any NA's and makesure values are integers 
   OTU = data.frame(otu_table(ps.current))
   OTU[is.na(OTU)] = 0
   OTU <- mutate_all(OTU, function(x) as.integer(as.character(x)))
