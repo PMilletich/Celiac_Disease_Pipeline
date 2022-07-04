@@ -7,6 +7,9 @@ library(dplyr) #mutate_all
 #################################################################
 #File with 16s Sequence and taxonomical classification 
 taxa_identifiers = read.csv("Taxa_ASV_Identifiers.csv")
+row.names(taxa_identifiers) = taxa_identifiers$ASV
+taxa_identifiers = taxa_identifiers[,c("ASV", "Genus")]
+
 #From Step 1 
 Total_reads = readRDS("Filters_PS.RDS")
 Sample_data = read.csv("Celiac_Samples.csv")
@@ -18,39 +21,51 @@ alpha = 0.05 #Significance threshold
 Control_Num = 2 #Numnber of Cases per control 
 seed_max = 100 #Max number of iterations 
 
-current_method = "Reads"
+#Create dataframe to append to 
 Actual_sign = data.frame()
+
 for (seed_number in 1:seed_max) {
+  #Print 10s to track progress 
   if (seed_number%%10 == 0 ) {
     print(seed_number)
   }
+  #Create current iterations phyloseq object 
   ps.filtered = Total_reads
   #####################
   #Sample Matching with n Controls
   subset_cases = subset(Sample_data, Sample_data$Autoimmune_2_groups != "Control")
   subset_controls = subset(Sample_data, Sample_data$Autoimmune_2_groups == "Control")
   
+  #Save Cases to final dataframe
   final_subset = subset_cases
+  #Create list of matching variables: Step 2
   Subset_1 = c("Region","Siblings_at_birth")
   
+  #Create list of number of controls for analysis 
   Matched = list()
   Count_1 = 0
-  current_id = "2061"#unique(subset_df_1$ID)[1]
+  
+  #For all Celiac cases IDs
   for (current_id in unique(subset_cases$ID)){
+    #Subset dataframe for ID, and only metadata columns of interest 
     current_row = subset(subset_cases, subset_cases$ID == current_id)
     current_row_subset = current_row[,Subset_1]
+    #Remove columns with NA
     current_row_subset = current_row_subset[ , colSums(is.na(current_row_subset)) == 0]
     
+    #Case ID 2061 only had Region listed, create a dataframe accordingly 
     if (current_id == "2061") {
       current_row_subset = data.frame("Region"= current_row_subset)
     }
     
+    #Merge controls matching columns of interest 
     Matched_subset = merge(subset_controls, current_row_subset)
+    #Append number of available controls to Matched list for further analysis 
     Matched = c(Matched, nrow(Matched_subset))
-    # print(paste(current_id, nrow(Matched_subset)))
     
+    #Subset the controls based on max number of controls from line ~18
     if (nrow(Matched_subset) >= 1 & typeof(current_row_subset) == "list") {
-      set.seed(seed_number)
+      set.seed(seed_number) #Set seed based on iteration number 
       Matched_subset = Matched_subset[sample(nrow(Matched_subset), Control_Num), ]
       final_subset = rbind(final_subset, Matched_subset)
       Count_1 = Count_1 + 1
@@ -59,12 +74,11 @@ for (seed_number in 1:seed_max) {
       Matched_subset = subset_controls[sample(nrow(subset_controls), Control_Num), ]
       final_subset = rbind(final_subset, Matched_subset)
     }
+    #Remove subset controls from the available control list 
     subset_controls = subset(subset_controls, ! subset_controls$ID %in% final_subset$ID)
   }
   
-  final_subset = unique(final_subset)
-  table(final_subset$Autoimmune_Disorder)
-  
+  #Add select case-control cohort to the phyloseq object 
   rownames(final_subset) = final_subset$ID
   sample_data(ps.filtered) = sample_data(final_subset)
   
@@ -83,7 +97,7 @@ for (seed_number in 1:seed_max) {
   otu_RA_1 = merge(qpcr_data, otu_RA, by = "row.names")
   row.names(otu_RA_1) = otu_RA_1$Row.names
   otu_RA_1$Row.names = NULL
-  i = 4
+
   #Multiply all the Relabundance columns by the reads/g column
   for(i in 2:length(colnames(otu_RA_1))) {
     otu_RA_1[is.na(otu_RA_1[,i]),i] = 0
@@ -92,16 +106,9 @@ for (seed_number in 1:seed_max) {
   ps.RA.qpcr_1 = ps.RA
   otu_table(ps.RA.qpcr_1) = otu_table(otu_RA_1, taxa_are_rows = FALSE)
   
-  #Taxa Identification 
-  row.names(taxa_identifiers) = taxa_identifiers$ASV
-  taxa_identifiers = taxa_identifiers[,c("ASV", current_glom_1)]
-  
-  if (current_method == "Reads") {
-    ps.current = ps.RA.qpcr_1
-  } else {
-    ps.current = ps.RA
-  }
-  
+  #use the total abundance (qpcr) data for all following analysis
+  ps.current = ps.RA.qpcr_1
+                                  
   ###########
   #Data Fluffing
   count_table = data.frame(t(otu_table(ps.current)))
@@ -116,6 +123,7 @@ for (seed_number in 1:seed_max) {
   row.names(count_table) = gsub("X", "", row.names(count_table))
   count_table$ID = row.names(count_table)
   count_table_2 = merge(count_table, final_subset)
+                                  
   AI = subset(count_table_2, count_table_2$Autoimmune_2_groups != "Control")
   Control = subset(count_table_2, count_table_2$Autoimmune_2_groups == "Control")
   count_table_2$Autoimmune_2_groups = factor(count_table_2$Autoimmune_2_groups, 
@@ -170,5 +178,5 @@ for (seed_number in 1:seed_max) {
   Actual_sign = rbind(Actual_sign, Actually_significant_1)
 }
 
-print(table(Actual_sign$Taxa_Name))
+#Save dataframe as CSV
 write.csv(Actual_sign, paste("./CSV_Output/Deseq_", current_method, "_2.csv", sep = ""), row.names = F)
