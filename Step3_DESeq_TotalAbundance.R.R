@@ -183,4 +183,4 @@ for (seed_number in 1:seed_max) {
 }
 
 #Save dataframe as CSV
-write.csv(Actual_sign, paste("./CSV_Output/Deseq_", current_method, "_2.csv", sep = ""), row.names = F)
+write.csv(Actual_sign, paste("Deseq_TotalAbundance_", Control_Num, ".csv", sep = ""), row.names = F)
