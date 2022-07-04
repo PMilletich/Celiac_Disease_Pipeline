@@ -1,40 +1,44 @@
-library(ggplot2)
-library(ggforce)
-library(vegan)
-library(ggpubr)
 library(DESeq2)
-library(phyloseq)
 library(dplyr)
 '%notin%' = Negate('%in%')
 
-###### 
+################################################################# 
 #File import 
-setwd("~/Desktop/Reviewer_Edits_V2/")
+#################################################################
+#16s sequence and taxa classification 
 taxa_identifiers = read.csv("Taxa_ASV_Identifiers.csv")
+#From Step 1 
 Total_reads = readRDS("Filters_PS.RDS")
-ps.RA.ALL = transform_sample_counts(Total_reads, function(x) x / sum(x) )
-OTU_All = data.frame(otu_table(ps.RA.ALL))
+Sample_data = read.csv("Celiac_Samples.csv")
 
+#################################################################
+#Determine how to convert Relative abundance to integers 
+#################################################################
+#Relative abundance 
+ps.RA.ALL = transform_sample_counts(Total_reads, function(x) x / sum(x))
+#Create dataframe of OTU table                                     
+OTU_All = data.frame(otu_table(ps.RA.ALL))
+                                    
+#Create list of all values 
 list = c()
 for (i in 1:ncol(OTU_All)) {
   current_list = OTU_All[,i]
   list = c(list, current_list)
 }
-
+#Remove 0's from list 
 list= subset(list, list != 0)
+#View Summary of list to see the minimum                                   
 summary(list)
  
-Sample_data = read.csv("Celiac_Samples.csv")
-
-Rel_int = 1e6
-alpha = 0.05
+#################################################################
+#Default Values 
+#################################################################
+Rel_int = 1e6 #Number to turn minimum vaolue to integer 
+alpha = 0.05 #Significance threshold 
 Control_Num = 2
-seed_number = 1
 seed_max = 100
 
-current_glom_1 = "Genus"
-
-current_method = "Matched"
+                                    
 Actual_sign = data.frame()
 for (seed_number in 1:seed_max) {
   if (seed_number%%10 == 0 ) {
@@ -168,4 +172,4 @@ for (seed_number in 1:seed_max) {
 }
 
 print(table(Actual_sign$Taxa_Name))
-write.csv(Actual_sign, paste("./CSV_Output/Deseq_", current_method, "RelAbun_2.csv", sep = ""), row.names = F)
+write.csv(Actual_sign, paste("Deseq_RelAbun_", Control_Num, ".csv", sep = ""), row.names = F)
