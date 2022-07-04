@@ -110,50 +110,53 @@ for (seed_number in 1:seed_max) {
   ps.current = ps.RA.qpcr_1
                                   
   ###########
-  #Data Fluffing
+  #Create Dataframe for analysis
+  #Create data frame of OTU Table and merge with Taxa_identifiers to find Genus
   count_table = data.frame(t(otu_table(ps.current)))
   count_table$ASV = row.names(count_table)
   count_table = merge(count_table, taxa_identifiers)
   row.names(count_table) = count_table[,current_glom_1]
-  Identifier_list = unique(rownames(count_table))
-  tax_table_all_group = unique(count_table[,current_glom_1])
+  #Remove old taxa_identifier columns                                 
   count_table$ASV = NULL
   count_table[,current_glom_1]= NULL
+  #Transpose (IDs as rows), and merge with metadata                                
   count_table = data.frame(t(count_table))
   row.names(count_table) = gsub("X", "", row.names(count_table))
   count_table$ID = row.names(count_table)
   count_table_2 = merge(count_table, final_subset)
-                                  
+  #Create subset of Celiac and controls                                
   AI = subset(count_table_2, count_table_2$Autoimmune_2_groups != "Control")
   Control = subset(count_table_2, count_table_2$Autoimmune_2_groups == "Control")
   count_table_2$Autoimmune_2_groups = factor(count_table_2$Autoimmune_2_groups, 
                                              levels = unique(count_table_2$Autoimmune_2_groups))
-  
+  #Replace any NA's and make sure values are integers 
   OTU = data.frame(otu_table(ps.current))
   OTU[is.na(OTU)] = 0
   OTU <- mutate_all(OTU, function(x) as.integer(as.character(x)))
   otu_table(ps.current) = otu_table(OTU, taxa_are_rows = F)
   
+  #Run DESEQ; https://www.rdocumentation.org/packages/DESeq2/versions/1.12.3/topics/estimateSizeFactors
   diagdds = suppressWarnings(phyloseq_to_deseq2(ps.current, ~ Autoimmune_2_groups))
   diagdds = estimateSizeFactors(diagdds, type = "poscounts")
-  
   diagdds = DESeq(diagdds, test="Wald", fitType="local", quiet = TRUE)
   resultsNames(diagdds)
   res = results(diagdds, cooksCutoff = FALSE)
-  
+  #Subset based on significance threshold; line ~20
   sigtab = data.frame(res[which(res$padj < alpha), ])
   
+  #If there are significant taxa 
   if (nrow(sigtab)> 0) {
-    sigtab = res[which(res$padj < alpha), ]
-    sigtab = data.frame(sigtab)
     sigtab$ASV = rownames(sigtab)
+    #Remove empty columns 
     sigtab <- sigtab[,colSums(is.na(sigtab))<nrow(sigtab)]
+    #Merge with taxa_identifiers 
     sigtab = merge(sigtab, taxa_identifiers)
+    #Replace special characters 
     sigtab[,current_glom_1] = gsub("-", ".", sigtab[,current_glom_1])
     sigtab[,current_glom_1] = gsub("/", ".", sigtab[,current_glom_1])
     
-    Identifier_list = unique(sigtab[,current_glom_1])
-    current_taxa = Identifier_list[1]
+    #Create list of significant taxa 
+    Identifier_list = unique(sigtab$Genus)
     significant_data = data.frame()
     for (current_taxa in Identifier_list) {
       AI[,current_taxa] = as.numeric(AI[,current_taxa])
@@ -164,6 +167,7 @@ for (seed_number in 1:seed_max) {
       count_table_2$Genera  = count_table_2[,current_taxa]
       P_value = subset(sigtab, sigtab[,current_glom_1] == current_taxa)
       P_value = P_value$padj
+      #Save the taxa name, prevalence for each group, and padj value into dataframe
       current_row = data.frame("Taxa" = current_taxa, "AI_prev" = AI_prev, 
                                "Control_prev" = Control_prev, "P_val" = P_value)
       significant_data = rbind(significant_data,current_row )
