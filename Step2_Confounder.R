@@ -15,10 +15,8 @@ library(phyloseq) #https://www.bioconductor.org/packages/release/bioc/html/phylo
 #####################
 #Load Files 
 #####################
-setwd("~/Desktop/Reviewer_Edits_V2/")
 #Sample Data and Phyloseq from Previous Subsetting Step 
 map = read.csv("Celiac_Samples.csv")
-
 OG_PS = readRDS("Filters_PS.RDS")
 
 #################################################################
@@ -45,7 +43,6 @@ for(i in 2:length(names(otu_RA_2))) {
 ps.qpcr = ps.RA
 otu_table(ps.qpcr) = otu_table(ps.qpcr, taxa_are_rows = F)
 
-table(map$Autoimmune_2_groups)
 ################################
 #Create list of columns to compare 
 ################################
@@ -69,25 +66,13 @@ Other = c("Autoimmune_2_groups","Region","Sex","Siblings_at_birth","Delivery","A
 ################################
 #### Factors impacting Autoimmune Development 
 ################################
-#create new dataframes for Cases or Controls
-AI = subset(map, map$Autoimmune_2_groups != "Control")
-Control = subset(map, map$Autoimmune_2_groups == "Control")
-
-AI_print = AI[,c(
-  "ID", "Age_Autoimmune_diagnosis", "HLA.Genotype",  "Sex", "Region", "Delivery", 
-  "Siblings_at_birth","Intro_Gluten_Binned", "Total_Breastfeeding_Binned","Intro_formula_Binned", 
-  "Apartment")]
-
-
-current_variable = "DR1.DQ5"
-current_list_var = "HLA"
+#create final data.frame 
 Final_df = data.frame()
-
+                                
+#Go through all four types of variables 
 for (current_list_var in c("HLA", "Diet", "Immune", "Other")) {
   #All Factors and Pvalues 
   Case_Confounders = data.frame()
-  #Significant Pvalues and Distributions
-  Distribution = data.frame()
   if (current_list_var == "HLA") {
     environmental_list = HLA
   } else if (current_list_var == "Diet") {
@@ -111,31 +96,25 @@ for (current_list_var in c("HLA", "Diet", "Immune", "Other")) {
                              "Pvalue" = pvalue)
     Case_Confounders = rbind(Case_Confounders, current_row)
   }
+  #Adjust Pvalues of current variables using False Discovery Rate
   Case_Confounders$FDR = p.adjust(Case_Confounders$Pvalue, "fdr")
   Final_df = rbind(Final_df, Case_Confounders)
 }
 
-#Case_Confounders = Case_Confounders[order(Case_Confounders$Pvalue),]
-write.csv(Distribution, "Chisq_Dist.csv", row.names = F)
+#Save final table
 write.csv(Final_df, "Chisq_Pvalues.csv", row.names = F)
 
 ################################
 #### Factors impacting Binomial Beta Diversity
 #### Takes a long time to run, depending on number of columns comparing 
 ################################
-current_ps = ps.qpcr #Set Phyloseq object to Relative Abun 
+current_ps = ps.qpcr #Test binomial differences on total abundance (qpcr
 Binomial_df = data.frame()
-# environmental_list = c("Siblings_at_birth","Region","Sex",
-#                        "Exclusive_Breastfeeding_Binned","Delivery",
-#                        "Total_Breastfeeding_Binned","Beef_first_year",
-#                        "Apartment", "Both_Parents_Abroad","Smoking_Pregnancy","Father_Over_40")
-#environmental_list= rev(environmental_list)
+
 for (current_list_var in c("HLA", "Diet", "Immune", "Other")) {
   print(current_list_var)
   #All Factors and Pvalues 
   Case_Confounders = data.frame()
-  #Significant Pvalues and Distributions
-  Distribution = data.frame()
   if (current_list_var == "HLA") {
     environmental_list = HLA
   } else if (current_list_var == "Diet") {
@@ -186,6 +165,3 @@ for (current_list_var in c("HLA", "Diet", "Immune", "Other")) {
 
 #Save dataframe to csv 
 write.csv(Binomial_df, "./CSV_Output/Beta_Diversity.csv", row.names = F)
-Binomial_df = read.csv("./CSV_Output/Beta_Diversity.csv")
-
-Binomial_df$FDR = p.adjust(Binomial_df$Pvalue, "fdr")
