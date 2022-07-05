@@ -1,32 +1,34 @@
 library(ggplot2)
 library(ggpubr)
 
-taxa_identifiers = read.csv("Taxa_ASV_Identifiers.csv")
-taxa_identifiers_1 = data.frame()
-current_glom = "Phylum"
-for (current_glom in c("Genus")) {
-  current_subset = unique(taxa_identifiers[,current_glom])
-  current_df = data.frame("Taxa" = current_glom, "Taxa_Name" = current_subset)
-  taxa_identifiers_1= rbind(taxa_identifiers_1, current_df)
-}
+################################################################# 
+#File import 
+#################################################################
+taxa_identifiers_1 = read.csv("Taxa_ASV_Identifiers.csv")
+row.names(taxa_identifiers_1) = taxa_identifiers$ASV
+taxa_identifiers_1 = taxa_identifiers_1["ASV", "Genus"]
 
-taxa_identifiers_1$Taxa_Name = gsub("-", ".", taxa_identifiers_1$Taxa_Name)
-taxa_identifiers_1$Taxa_Name = gsub("/", ".", taxa_identifiers_1$Taxa_Name)
+Reads_data = read.csv("Deseq_TotalAbundance_2.csv") #Step_3
+RelAbun_data = read.csv("Deseq_RelativeAbundance_2.csv") #Step_3.1
 
+#################################################################
+#Default Values 
+#################################################################
 iteration_Threshold = 50
-current_method = "Reads/g"
 
 for (current_method in c("Reads/g", "Relative Abundance")) {
   if (current_method == "Reads/g") {
-    current_data = read.csv("./CSV_Output/Deseq_Matched_2.csv")
+    current_data = Reads_data
   } else {
-    current_data = read.csv("./CSV_Output/Deseq_MatchedRelAbun_2.csv")
+    current_data = RelAbun_data
   }
   
+  #Create a dataframe of taxa and number of iterations
   df_Count = data.frame(table(current_data$Taxa_Name))
+  #Threshold by cutoff line ~17, and create list of remaining taxa
   df_Count = subset(df_Count, df_Count$Freq >= iteration_Threshold)
-  
   Genus_list = unique(df_Count$Var1)
+  
   
   current_data = subset(current_data, current_data$Taxa_Name %in% Genus_list)
   df_Count = data.frame(table(current_data$Taxa_Name))
@@ -77,20 +79,16 @@ for (current_method in c("Reads/g", "Relative Abundance")) {
     geom_vline(xintercept = 0) +
     theme(axis.title.y = element_blank()) +
     ggtitle(paste("Log2FoldChange", current_method, sep = "\n"))
-  LFC
   
+  #Change the methods to 
   if (current_method == "Reads/g") {
-    current_method = "Reads"
+    assign("Reads_plot", LFC)
   } else {
-    current_method= "RelAbun"
+    assign("RelAbun_plot", LFC)
   }
-  jpeg(paste("./Images/Deseq_50_", current_method, ".jpeg", sep = ""), res = 400, height= 3000, width = 3000)
-  print(LFC)
-  dev.off()
-  assign(paste(current_method, "_plot", sep = ""),LFC )
-  print(paste(current_method, "_plot", sep = ""))
 }
 
+#Save image as jpeg 
 jpeg("./Images/Deseq_Combined.jpeg", res = 400, height = 2000, width = 4000)
 ggarrange(Reads_plot, RelAbun_plot, ncol = 2)
 dev.off()
