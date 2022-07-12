@@ -3,154 +3,175 @@ library(phyloseq)
 library(pime)
 library(ggplot2)
 library(ggpubr)
-#library(vegan)
 
-setwd("~/Desktop/ABIS/Celiac_Paper/Frontiers_Jun13/Reviewer_Edits_v2/")
-Control_Num = 2
-
-physeq_f = readRDS("Filters_PS.RDS") #[ 10389 taxa and 1756 samples ]
+#################################################################
+#File Import 
+physeq_f = readRDS("Filters_PS.RDS")
 Sample_data = data.frame(sample_data(physeq_f))
+
 taxa_identifiers = read.csv("Taxa_ASV_Identifiers.csv")
 row.names(taxa_identifiers) = taxa_identifiers$ASV
 taxa_identifiers = taxa_identifiers[,c("ASV", "Genus")]
 
+
+#################################################################
+#Default Values 
+setwd("~/Desktop/ABIS/Celiac_Paper/Frontiers_Jun13/Reviewer_Edits_v2/")
+Control_Num = 2
+seed_max = 100 
+seed_number = 1 
+current_method = "Reads"
+iteration_threshold = 50 
+
+#Create list of matching variables: Step 2
+Subset_1 = c("Region","Siblings_at_birth")
+
+subset_cases_OG = subset(Sample_data, Sample_data$Autoimmune_2_groups != "Control")
+subset_controls_OG = subset(Sample_data, Sample_data$Autoimmune_2_groups == "Control")
+
 #################################################################
 #Relative Abundance 
-#################################################################
 ps.RA = transform_sample_counts(physeq_f, function(x) x / sum(x) )
 
 #################################################################
-#qPCR 
-#################################################################
+#qPCR; Total Abundance 
 qpcr_data = Sample_data[,c("ID", "copies_16s_per_gram_stool")]
 rownames(qpcr_data) = qpcr_data$ID
+qpcr_data$ID = NULL
+
+#Merge the Relative Abundance table and the qpcr table 
 otu_RA = data.frame(otu_table(ps.RA))
 otu_RA_1 = merge(qpcr_data, otu_RA, by = "row.names")
 row.names(otu_RA_1) = otu_RA_1$Row.names
 otu_RA_1$Row.names = NULL
-otu_RA_1$ID = NULL
-otu_RA_2 = otu_RA_1
 
-for(i in 2:length(names(otu_RA_2))) {
-  otu_RA_2[,i] <- round(otu_RA_2[,1] * otu_RA_2[, i])
+for(i in 2:length(names(otu_RA_1))) {
+  otu_RA_1[,i] <- round(otu_RA_1[,1] * otu_RA_1[, i])
 }
 
-otu_RA_2$copies_16s_per_gram_stool = NULL
+otu_RA_1$copies_16s_per_gram_stool = NULL
 
 ps.RA.qpcr = ps.RA
-otu_RA_2[is.na(otu_RA_2)] = 0
-otu_RA_2 = otu_RA_2[rowSums(otu_RA_2[])>0,]
-otu_RA_2 = otu_RA_2[,colSums(otu_RA_2[])>0]
-
-otu_table(ps.RA.qpcr) = otu_table(otu_RA_2, taxa_are_rows = FALSE)
-ps.RA.qpcr
-
-tax_table(ps.RA) = tax_table(ps.RA.qpcr)
-
-seed_number = 1
-current_method = "Reads"
-subset_cases_OG = subset(Sample_data, Sample_data$Autoimmune_2_groups != "Control")
-subset_controls_OG = subset(Sample_data, Sample_data$Autoimmune_2_groups == "Control")
+otu_table(ps.RA.qpcr) = otu_table(otu_RA_1, taxa_are_rows = FALSE)
+#tax_table(ps.RA) = tax_table(ps.RA.qpcr)
 
 for (current_method in c("Reads", "RelativeAbundance")) {
   total_data = data.frame()
   best_df = data.frame()
-  for (seed_number in 1:10) {
-    current_run = paste(current_method, seed_number, sep = "_")
+  for (seed_number in 1:seed_max) {
     iteration = seed_number
-    seed_number = seed_number
-    print(current_run)
+    
+    #Sample Matching with n Controls
     subset_cases = subset_cases_OG
     subset_controls = subset_controls_OG
+    
+    #Save Cases to final dataframe
     PIME_data = subset_cases
     PIME_data$Group = "fCD"
     
-    Subset_1 = c("Region","Siblings_at_birth")
-    current_id = "19289"#unique(subset_df_1$ID)[1]
+    #For all Celiac cases IDs
     for (current_id in unique(subset_cases$ID)){
+      #Subset dataframe for ID, and only metadata columns of interest 
       current_row = subset(subset_cases, subset_cases$ID == current_id)
       current_row_subset = current_row[,Subset_1]
+      #Remove columns with NA
       current_row_subset = current_row_subset[ , colSums(is.na(current_row_subset)) == 0]
       
+      #Case ID 2061 only had Region listed, create a dataframe accordingly 
       if (current_id == "2061") {
         current_row_subset = data.frame("Region"= current_row_subset)
       }
-      
+   
+      #Merge controls matching columns of interest 
       Matched_subset = merge(subset_controls, current_row_subset)
+      Matched_subset$Group = "Controls"
+      
+      #Subset the controls based on max number of controls from line ~20
       if (nrow(Matched_subset) >= 1 & typeof(current_row_subset) == "list") {
-        set.seed(seed_number)
+        set.seed(seed_number) #Set seed based on iteration number 
         Matched_subset = Matched_subset[sample(nrow(Matched_subset), Control_Num), ]
-        Matched_subset$Group = "Controls"
         PIME_data = rbind(PIME_data, Matched_subset)
-        subset_controls = subset(subset_controls, ! subset_controls$ID %in% PIME_data$ID)
-      } else {
+      } else { #If there are no matched controls, randomly select you
         set.seed(seed_number)
         Matched_subset = subset_controls[sample(nrow(subset_controls), Control_Num), ]
-        Matched_subset$Group = "Controls"
         PIME_data = rbind(PIME_data, Matched_subset)
-        subset_controls = subset(subset_controls, ! subset_controls$ID %in% PIME_data$ID)
       }
+      #Remove subset controls from the available control list 
+      subset_controls = subset(subset_controls, ! subset_controls$ID %in% PIME_data$ID)
+      
     }
     table(PIME_data$Group)
-    Sample_data = PIME_data
-    rownames(Sample_data) = Sample_data$ID
     
+    #Load Relative or Total Abundance phyloseq object 
     if (current_method == "Reads") {
       physeq_f = ps.RA.qpcr
     } else {
       physeq_f = ps.RA
     }
-    sample_data(physeq_f) = sample_data(Sample_data)
-    physeq_f
+    #Add select case-control cohort to the phyloseq object 
+    rownames(PIME_data) = PIME_data$ID
+    sample_data(physeq_f) = sample_data(PIME_data)
+    physeq_f #[ 175 taxa and 78 samples ]
+    
     ################################################
-    #Celiac
+    #PIME
     print(pime.oob.error(physeq_f, "Group"))
     per_variable_obj= pime.split.by.variable(physeq_f, "Group")
     
-    print(sum(phyloseq::sample_sums(physeq_f)))
-    
     prevalences=pime.prevalence(per_variable_obj)
     set.seed(42)
+
     best.prev=pime.best.prevalence(prevalences, "Group")
-    best.df = data.frame(best.prev$`OOB error`)
-    best.df$Iteration = seed_number
-    if (seed_number == 1) {
-      best_df= best.df
-    } else {
-      best_df = cbind(best_df, best.df)
+
+    #Add information for the first 10 iterations 
+    if (seed_number <= 10) {
+      print(paste(seed_number, sum(phyloseq::sample_sums(physeq_f))))
+      
+      best.df = data.frame(best.prev$`OOB error`)
+      best.df$Iteration = seed_number
+      if (seed_number == 1) {
+        best_df= best.df
+      } else {
+        best_df = cbind(best_df, best.df)
+      }
     }
+  
     imp60=best.prev$`Importance`$`Prevalence 60`
     prevalence.60 = prevalences$`60`
     input_ord = ordinate(prevalence.60, "PCoA" , "binomial")
     
     if (iteration%%25 == 0) {
+      #Create PCOA graph
       graph = plot_ordination(prevalence.60, input_ord , color = "Group")+
         stat_ellipse(aes(group = Group)) + 
-        #facet_wrap(~Region) +
         ggtitle(paste("Iteration: ", iteration, sep = ""))
       assign(paste("graph_", iteration, sep = ""), graph)
     }
     
-    imp60_subset = subset(imp60, imp60$MeanDecreaseAccuracy > 0)
+    imp60_subset = subset(imp60, imp60$MeanDecreaseAccuracy > 0 & 
+                            imp60$Controls > 0 & 
+                            imp60$fCD > 0)
     
     ###########
-    #Data Fluffing
+    #Create Dataframe for analysis
+    #Create data frame of OTU Table and merge with Taxa_identifiers to find Genus
     count_table = data.frame(t(otu_table(prevalence.60)))
     count_table$ASV = row.names(count_table)
     count_table = merge(count_table, taxa_identifiers)
     row.names(count_table) = count_table$Genus
-    Identifier_list = unique(rownames(count_table))
-    tax_table_all_group = unique(count_table$Genus)
+    #Remove old taxa_identifier columns                                 
     count_table$ASV = NULL
     count_table$Genus= NULL
+    #Transpose (IDs as rows), and merge with metadata 
     count_table = data.frame(t(count_table))
     row.names(count_table) = gsub("X", "", row.names(count_table))
     count_table$ID = row.names(count_table)
     count_table_2 = merge(count_table, PIME_data)
+    #Create subset of Celiac and controls                                
     AI = subset(count_table_2, count_table_2$Autoimmune_2_groups != "Control")
     Control = subset(count_table_2, count_table_2$Autoimmune_2_groups == "Control")
     
-    current_genus = unique(imp60_subset$Genus)[1]
+    #Find Mean Abundance for all selected Taxa 
     mean_data = data.frame()
     for (current_genus in unique(imp60_subset$Genus)) {
       current_subset = subset(imp60_subset, imp60_subset$Genus == current_genus)
@@ -162,44 +183,44 @@ for (current_method in c("Reads", "RelativeAbundance")) {
       current_subset$Control_Mean = Control_mean
       mean_data= rbind(mean_data, current_subset)
     }
+    #Bind all the averaged data 
     total_data = rbind(total_data, mean_data)
   }
+  #Graph sample iterations 
   final_graph = ggarrange(graph_25, graph_50, 
                           graph_75, graph_100, 
                           ncol = 2, nrow = 2, common.legend = T)
   final_graph = annotate_figure(final_graph, current_method)
+  
+  #Assign and save final dataframe and graph
   assign(paste(current_method, "total", sep = ""), total_data)
-  
   assign(paste("PCOA", current_method, sep = "_"), final_graph)
-  
-  
 }
-final_graph = ggarrange(`PCOA Reads _`, PCOA_RelativeAbundance)
-jpeg(paste("./Images/", current_method, "_PIME_60.jpeg", sep = ""), res = 400, height = 2000, width = 4000)
+#Merge together both PCOA graphs
+final_graph = ggarrange(`PCOA_Reads`, PCOA_RelativeAbundance)
+
+#Save final merged graph 
+jpeg("PIME_60.jpeg", res = 400, height = 2000, width = 4000)
 final_graph
 dev.off()
 
-#write.csv(RelativeAbundancetotal, "./CSV_Output/RelAbund_PIME_100.csv", row.names = F)
-#write.csv(Readstotal, "./CSV_Output/Reads_PIME_100.csv", row.names = F)
-
-current_method = "Reads/g"
+#Create bar graphs of averages 
 for (current_method in c("Reads/g", "Relative Abundance")) {
+  #Load Averages of each iteration based on method
   if (current_method == "Reads/g") {
     total_data = Readstotal
   } else {
     total_data = RelativeAbundancetotal 
   }
   
-  total_data_subset = subset(total_data, total_data$Controls >= 0 &
-                               total_data$fCD > 0 & 
-                               total_data$MeanDecreaseAccuracy > 0)
-  
-  count_data = data.frame(table(total_data_subset$Genus))
-  count_data = subset(count_data, count_data$Freq >= 50)
-  
-  total_data_subset = subset(total_data_subset, total_data_subset$Genus %in% count_data$Var1)
+  #Count number of counts by iterations and remove by iteration threshold ~line 24
+  count_data = data.frame(table(total_data$Genus))
+  count_data = subset(count_data, count_data$Freq >= iteration_threshold)
+  #Only keep those that are above the threshold
+  total_data_subset = subset(total_data, 
+                             total_data$Genus %in% count_data$Var1)
 
-  
+  #Create dataframes of just fCD or Controls 
   total_data_fCD = total_data_subset[,c("AI_Mean", "MeanDecreaseAccuracy", "Genus")]
   colnames (total_data_fCD) = c("Value", "Accuracy", "Genus")
   total_data_fCD$Group = "fCD"
@@ -210,13 +231,14 @@ for (current_method in c("Reads/g", "Relative Abundance")) {
   
   fCD_data = data.frame()
   Control_data = data.frame()
-  current_genus = "Haemophilus"
+  #For all the subsetted Genera...
   for (current_genus in unique(total_data_subset$Genus)) {
     AI_subset = subset(total_data_fCD, total_data_fCD$Genus == current_genus)
     AI_mean = mean(AI_subset$Value)
     
     Control_subset = subset(total_data_Control, total_data_Control$Genus == current_genus)
     Control_mean = mean(Control_subset$Value)
+    #Separate by Trend and create graphs
     if (AI_mean > Control_mean) {
       fCD_data = rbind(fCD_data,AI_subset)
       fCD_data = rbind(fCD_data,Control_subset)
@@ -240,14 +262,15 @@ for (current_method in c("Reads/g", "Relative Abundance")) {
           axis.title.x = element_blank()) + ylab(current_method) + 
     ggtitle(paste(current_method, "\nGreater in Controls"))  
   
+  #Create merged graphs, assign and save graph 
   box_graph = ggarrange(fCD_graph, Control_graph, nrow = 2, common.legend = T)
   box_graph
   assign(paste(current_method, "graph", sep = "_"), box_graph)
-  
 }
+
+#Arrange Graphs and save as jpeg 
 plot_final = ggarrange(`Reads/g_graph`,`Relative Abundance_graph`,
           ncol =2 , common.legend = T); plot_final
-
-jpeg ("./Images/PIME_RR_60.jpeg", res = 400, height = 4000, width = 4000)
+jpeg ("PIME_RR_60.jpeg", res = 400, height = 4000, width = 4000)
 plot_final
 dev.off()
