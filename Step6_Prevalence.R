@@ -1,6 +1,4 @@
 library(ggplot2)
-library(ggforce)
-library(vegan)
 library(ggpubr)
 '%notin%' = Negate('%in%')
 
@@ -17,12 +15,9 @@ Sample_data = read.csv("Celiac_Samples.csv")
 
 #################################################################
 #Default Values 
-alpha = 0.05
 Control_Num = 2
-seed_number = 1
 seed_max = 100
 Prev_Difference = 25
-current_glom_1 = "Genus"
 #Create list to match on; Step 2 
 Subset_1 = c("Region","Siblings_at_birth")
 iteration_threshold = 50
