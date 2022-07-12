@@ -2,9 +2,6 @@ library(ggplot2)
 library(ggforce)
 library(vegan)
 library(ggpubr)
-library(DESeq2)
-library(phyloseq)
-library(dplyr)
 '%notin%' = Negate('%in%')
 
 ###### 
