@@ -1,7 +1,5 @@
 library(phyloseq) #https://www.bioconductor.org/packages/release/bioc/html/phyloseq.html
 
-setwd("~/Desktop/Reviewer_Edits_V2/")
-
 '%notin%' = Negate('%in%')
 
 #Read in original Phyloseq data and original metadata 
